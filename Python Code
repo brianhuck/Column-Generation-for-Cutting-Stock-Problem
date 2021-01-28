@@ -1,0 +1,140 @@
+
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Jan 28 06:34:44 2021
+
+@author: Brolly
+"""
+#Goal: Solve the cutting stock using column generation
+
+
+import numpy as np
+from ortools.linear_solver import pywraplp
+
+"""
+Cutting stock problem we discussed in class
+
+
+"""
+
+
+optimal = "FALSE"
+
+"""
+Find B_inv and the shadow prices
+"""
+#Begin  with an obvious BFS
+
+#Create the rows for B
+r1=[2,0,0,0]
+r2=[0,2,0,0]
+r3=[0,0,2,0]
+r4=[0,0,0,3]
+
+#The RHS from the constraints is:
+b = np.array([[511],[301],[263],[383]])
+
+# Construct B
+B = np.array([r1,r2,r3,r4])
+
+# Find the inverse of B
+B_inv = np.linalg.inv(B)
+
+# The cost coefficients are:
+c = [1,1,1,1]
+
+while optimal == "FALSE":
+
+    # The shadow prices (SP) are equal to c*B_inv
+    c_B_inv = np.dot(c,B_inv)
+    
+    
+    """
+    Create an optimization proble to generate a col to enter the basis
+    """
+    #instantiate the model
+    solver = pywraplp.Solver('subproblem', pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING)
+    
+    
+    # define variables
+    x1 = solver.IntVar(0, solver.infinity(), 'x1')
+    x2 = solver.IntVar(0, solver.infinity(), 'x2')   
+    x3 = solver.IntVar(0, solver.infinity(), 'x3')
+    x4 = solver.IntVar(0, solver.infinity(), 'x4')
+    
+    # define constraints
+    solver.Add(9*x1 + 8*x2 + 7*x3 + 6*x4 <= 20)
+    
+    
+    # define the objective function
+    # min z = SP1*x1 + SP2*x2 + SP3*x3 
+    solver.Maximize(c_B_inv[0]*x1 + c_B_inv[1]*x2 + c_B_inv[2]*x3 + c_B_inv[3]*x4)
+    
+    ###############################
+    # solve the problem
+    ###############################
+    
+    solver.Solve()
+    opt_solution = c_B_inv[0]*x1.solution_value() + c_B_inv[1]*x2.solution_value() + c_B_inv[2]*x3.solution_value() + c_B_inv[3]*x4.solution_value()
+    
+    
+    
+    #print('Number of variables = ', solver.NumVariables())
+    #print('Number of constraints = ', solver.NumConstraints())
+    
+    # the value of each variable 
+
+    # the value of the objective function
+
+    if 1-opt_solution >=0:
+        optimal = "TRUE"
+    
+    """
+    determine exiting row
+    """
+    
+    #Create new column from sub-problem solution
+    col_new = np.array([[x1.solution_value()],[x2.solution_value()],[x3.solution_value()],[x4.solution_value()]])
+    
+    #Find p_j: the values of the entering column in B_inv
+    p_j = np.dot(B_inv, col_new)
+    
+    #calculate RHS: B_inv * b
+    rhs = np.dot(B_inv, b)
+    
+    # calculate min ratio test
+    min_ratio_test = rhs / p_j
+    min_ratio_value = min(rhs / p_j)
+    
+    # find the row of exiting var
+    exiting_row = np.where(min_ratio_test == min_ratio_value)[0][0]
+    
+    """
+    Create E to update B_inv
+    """
+    # Create Identity matrix
+    I = np.eye(len(r1))
+    
+    #update the identity matrix col with p_j
+    for row, i in zip(I, p_j):
+        row[exiting_row] = i
+    
+    # Finde E: take the inverse of the new I
+    E = np.linalg.inv(I)
+    
+    # Update B: multiply E by B_inv
+    B_inv = np.dot(E, B_inv)
+    
+# Since optimal find the RHS of the current Tableau
+    
+rhs = np.dot(B_inv,b)
+solution = np.ceil(rhs)
+
+print('Solution: ')
+print('x1 = ', solution[0][0])
+print('x2 = ', solution[1][0])
+print('x3 = ', solution[2][0])
+print('x4 = ', solution[3][0])
+    
+print('Optimal objective value = ', opt_solution)
+    
